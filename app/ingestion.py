@@ -1,37 +1,60 @@
-from pathlib import Path
+import os
+import tempfile
+from playwright.async_api import async_playwright
+import whisper
 
-from app.config import get_settings
+class ContentIngestionEngine:
+    def __init__(self):
+        self._whisper_model = None
 
+    @property
+    def whisper_model(self):
+        if self._whisper_model is None:
+            # Uses lightweight 'base' model for fast local CPU/GPU transcription
+            self._whisper_model = whisper.load_model("base")
+        return self._whisper_model
 
-async def scrape_page(url: str) -> str:
-    """Fetch visible page text using a headless Chromium browser."""
-    from playwright.async_api import async_playwright
-
-    async with async_playwright() as playwright:
-        browser = await playwright.chromium.launch()
-        try:
+    async def extract_from_url(self, url: str) -> str:
+        """
+        Uses Playwright headless Chromium to render JavaScript-heavy educational portals
+        (e.g., NCERT, Wikipedia, SWAYAM, Khan Academy) and extract clean article body text.
+        """
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
             page = await browser.new_page()
-            response = await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-            if response is None or not response.ok:
-                status = response.status if response is not None else "no response"
-                raise RuntimeError(f"Unable to load page ({status}): {url}")
-            return await page.locator("body").inner_text()
-        finally:
+            await page.goto(url, wait_until="domcontentloaded", timeout=20000)
+            
+            # Remove navigation, ads, footers, and scripts before extracting educational paragraphs
+            extracted_text = await page.evaluate("""() => {
+                const selectorsToRemove = ['nav', 'header', 'footer', 'script', 'style', 'aside', '.ads'];
+                selectorsToRemove.forEach(sel => {
+                    document.querySelectorAll(sel).forEach(el => el.remove());
+                });
+                const paragraphs = Array.from(document.querySelectorAll('article p, main p, p'));
+                return paragraphs
+                    .map(p => p.innerText.trim())
+                    .filter(text => text.length > 40)
+                    .slice(0, 15)
+                    .join('\\n\\n');
+            }""")
             await browser.close()
+            
+            if not extracted_text:
+                raise ValueError("Could not extract readable educational paragraphs from the provided URL.")
+            return extracted_text
 
+    def transcribe_audio_lecture(self, file_bytes: bytes, filename: str) -> str:
+        """
+        Uses OpenAI Whisper to transcribe spoken educational lectures into text for simplification.
+        """
+        suffix = os.path.splitext(filename)[1] or ".wav"
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+            tmp.write(file_bytes)
+            tmp_path = tmp.name
 
-def transcribe_audio(audio_path: str | Path, language: str | None = None) -> dict:
-    """Transcribe an audio file with OpenAI Whisper."""
-    import whisper
-
-    path = Path(audio_path)
-    if not path.is_file():
-        raise FileNotFoundError(f"Audio file does not exist: {path}")
-
-    model = whisper.load_model(get_settings().whisper_model)
-    result = model.transcribe(str(path), language=language, fp16=False)
-    return {
-        "text": result["text"].strip(),
-        "language": result.get("language"),
-        "segments": result.get("segments", []),
-    }
+        try:
+            result = self.whisper_model.transcribe(tmp_path, fp16=False)
+            return result.get("text", "").strip()
+        finally:
+            if os.path.exists(tmp_path):
+                os.remove(tmp_path)
