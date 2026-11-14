@@ -1,49 +1,36 @@
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import datetime
+from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime
+from sqlalchemy.orm import declarative_base, sessionmaker
+from app.config import Config
 
-from sqlalchemy import DateTime, String, Text, create_engine
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
+engine = create_engine(Config.DATABASE_URL, connect_args={"check_same_thread": False})
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
-from app.config import get_settings
+class SimplificationJob(Base):
+    __tablename__ = "simplification_jobs"
 
+    id = Column(Integer, primary_key=True, index=True)
+    source_type = Column(String(50))               # 'text', 'url', 'audio'
+    original_text = Column(Text)
+    simplified_english = Column(Text)
+    translated_indic_text = Column(Text)
+    back_translated_text = Column(Text)
+    target_language = Column(String(10))           # 'hi', 'bn', 'ta', 'te'
+    reading_level = Column(String(20))             # 'level_1', 'level_2', 'level_3'
+    
+    # Quality Validation Telemetry
+    source_flesch_kincaid = Column(Float)
+    simplified_flesch_kincaid = Column(Float)
+    indic_readability_score = Column(Float)        # Custom Matra & Conjunct index (0-100, lower is simpler)
+    back_translation_cosine_sim = Column(Float)    # Scikit-learn TF-IDF / Char N-gram Cosine Similarity
+    llm_semantic_consistency = Column(Float)       # AI Semantic Verification (0.0 to 1.0)
+    composite_quality_score = Column(Float)
+    iterations_taken = Column(Integer)             # Number of LangGraph self-correction loops
+    
+    audio_file_path = Column(String(255), nullable=True)
+    glossary_json = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
 
-class Base(DeclarativeBase):
-    pass
-
-
-class TelemetryEvent(Base):
-    __tablename__ = "telemetry_events"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    event_type: Mapped[str] = mapped_column(String(80), index=True)
-    language: Mapped[str | None] = mapped_column(String(12), nullable=True)
-    details: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
-    )
-
-
-def _create_engine():
-    url = get_settings().database_url
-    if url.startswith("sqlite:///"):
-        database_path = Path(url.removeprefix("sqlite:///"))
-        if str(database_path) != ":memory:":
-            database_path.parent.mkdir(parents=True, exist_ok=True)
-        return create_engine(url, connect_args={"check_same_thread": False})
-    return create_engine(url)
-
-
-engine = _create_engine()
-SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
-
-
-def init_db() -> None:
+def init_db():
     Base.metadata.create_all(bind=engine)
-
-
-def log_event(event_type: str, language: str | None = None, details: str | None = None) -> None:
-    with SessionLocal() as session:
-        session.add(
-            TelemetryEvent(event_type=event_type, language=language, details=details)
-        )
-        session.commit()

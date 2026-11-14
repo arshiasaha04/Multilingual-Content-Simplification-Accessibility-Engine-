@@ -1,9 +1,18 @@
-.venv/
+# Environment variables (NEVER push API keys!)
+.env
+
+# Python cache & virtual environments
 __pycache__/
 *.py[cod]
-.env
-data/
-static/audio/*
-!static/audio/.gitkeep
-static/plots/*
-!static/plots/.gitkeep
+venv/
+.venv/
+env/
+
+# Local SQLite database & generated media
+*.db
+static/audio/*.wav
+static/plots/*.png
+
+# OS & Editor files
+.DS_Store
+.vscode/
