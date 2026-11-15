@@ -13,10 +13,17 @@ class NeuralAccessibilityAudioEngine:
     """
 
     INDIC_NEURAL_VOICES = {
+        "en": "en-IN-NeerjaNeural",
         "hi": "hi-IN-SwaraNeural",
         "bn": "bn-IN-TanishaaNeural",
         "ta": "ta-IN-PallaviNeural",
-        "te": "te-IN-ShrutiNeural"
+        "te": "te-IN-ShrutiNeural",
+        "mr": "mr-IN-AarohiNeural",
+        "gu": "gu-IN-DhwaniNeural",
+        "kn": "kn-IN-SapnaNeural",
+        "ml": "ml-IN-SobhanaNeural",
+        "pa": "pa-IN-OjasNeural",
+        "ur": "ur-IN-GulNeural"
     }
 
     def __init__(self):

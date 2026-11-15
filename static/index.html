@@ -1,157 +1,609 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>BhashaSaral | Multilingual Content Simplification & Accessibility Engine</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#f4ead8">
+<title>ClearWords | Multilingual Simplification & Accessibility Engine</title>
+<style>
+/* Palette: paper, ink, saffron, vermilion, cerulean, marigold. No green, no violet/purple. */
+:root {
+  color-scheme: light;
+  --paper: #f4ead8;
+  --card: #fffaf0;
+  --ink: #1c2530;
+  --ink-soft: #55606b;
+  --saffron: #ff9f1c;
+  --marigold: #ffcf3f;
+  --vermilion: #e4572e;
+  --cerulean: #1f7fb8;
+  --sky: #5ec2e8;
+  --brick: #b83a1a;
+  font-family: "Segoe UI", "Noto Sans", "Noto Sans Devanagari", "Noto Sans Bengali", system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh; display: grid; place-items: center;
+  padding: 2rem 1rem; line-height: 1.6; overflow-x: hidden;
+  background-color: var(--paper);
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .4 0 0 0 0 .3 0 0 0 0 .2 0 0 0 .09 0'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E"),
+    radial-gradient(900px 600px at 10% 0%, rgba(255, 159, 28, .22), transparent 60%),
+    radial-gradient(800px 600px at 100% 100%, rgba(31, 127, 184, .18), transparent 60%);
+}
+
+/* ---------- Floating script glyphs (recolor on keystrokes) ---------- */
+.glyphs { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+.glyph {
+  position: absolute; top: 0; left: 0; font-weight: 800; opacity: .55;
+  color: var(--saffron);
+  transition: color .6s ease;
+  user-select: none; will-change: transform;
+}
+
+/* ---------- Card ---------- */
+.stage { position: relative; z-index: 1; width: min(100%, 820px); }
+main {
+  padding: clamp(1.4rem, 5vw, 2.6rem);
+  background: var(--card);
+  border: 2px solid var(--ink);
+  border-radius: 1.1rem;
+  box-shadow: 9px 9px 0 var(--saffron);
+}
+h1 {
+  margin: 0 0 .5rem;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Noto Serif", serif;
+  font-size: clamp(2rem, 5.5vw, 3.1rem); line-height: 1.1; letter-spacing: -.015em; font-weight: 800;
+}
+h1 mark {
+  color: inherit; background: linear-gradient(transparent 58%, var(--marigold) 58% 92%, transparent 92%);
+  padding: 0 .1em;
+}
+.lede { margin: 0; color: var(--ink-soft); font-size: 1.05rem; }
+
+/* ---------- Readability thread ---------- */
+.thread { margin: .6rem 0 .2rem; }
+.thread svg { display: block; width: 100%; height: 84px; overflow: visible; }
+.thread-label {
+  display: flex; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+  font-size: .82rem; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-soft);
+}
+#thread-state { color: var(--ink); transition: color .4s; }
+#thread-state[data-level="tangled"] { color: var(--brick); }
+#thread-state[data-level="smooth"] { color: var(--cerulean); }
+
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+label { display: block; font-weight: 700; margin: 1.1rem 0 .4rem; }
+textarea, select, button { font: inherit; }
+textarea, select {
+  width: 100%; padding: .8rem 1rem; color: var(--ink); background: #fff;
+  border: 2px solid var(--ink); border-radius: .6rem;
+  transition: box-shadow .2s, border-color .2s;
+}
+select {
+  appearance: none; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink) 50%), linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+  background-position: calc(100% - 1.3rem) 55%, calc(100% - 1rem) 55%;
+  background-size: .35rem .35rem; background-repeat: no-repeat;
+}
+textarea { min-height: 10rem; resize: vertical; }
+textarea::placeholder { color: #8a8f94; }
+textarea:focus, select:focus { outline: none; border-color: var(--cerulean); box-shadow: 4px 4px 0 var(--sky); }
+:focus-visible { outline: 3px solid var(--cerulean); outline-offset: 3px; }
+textarea:focus-visible, select:focus-visible { outline: none; }
+.row { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; flex-wrap: wrap; }
+#help { margin: .5rem 0 0; font-size: .9rem; color: var(--ink-soft); }
+#count { font-variant-numeric: tabular-nums; font-size: .9rem; color: var(--ink-soft); }
+
+.btn-row { display: flex; gap: .8rem; flex-wrap: wrap; margin-top: 1.2rem; }
+button {
+  padding: .85rem 1.7rem; cursor: pointer;
+  font-weight: 750; letter-spacing: .01em;
+  color: var(--paper); background: var(--ink);
+  border: 2px solid var(--ink); border-radius: .6rem;
+  transition: background .25s, color .25s, transform .15s;
+}
+button:hover { background: var(--vermilion); border-color: var(--ink); color: #fff; }
+button.secondary { background: var(--card); color: var(--ink); }
+button.secondary:hover { background: var(--marigold); color: var(--ink); }
+button[aria-busy="true"] { pointer-events: none; background: var(--saffron); color: var(--ink); }
+
+[role="status"] { min-height: 1.6em; margin: 1rem 0 0; color: var(--ink-soft); }
+[role="status"].error { color: var(--brick); font-weight: 600; }
+[role="status"].ok { color: var(--cerulean); font-weight: 600; }
+
+#result {
+  margin-top: 1.2rem; padding: 1.3rem 1.4rem; border-radius: .8rem;
+  background: #fff; border: 2px dashed var(--cerulean);
+  display: flex; flex-direction: column; gap: 1rem;
+}
+#result[hidden] { display: none; }
+#result h2 { margin: 0 0 .3rem; font-size: 1.1rem; color: var(--cerulean); }
+#result-text { margin: 0; white-space: pre-wrap; font-size: 1.15rem; font-weight: 500; }
+
+.sub-box {
+  padding: .85rem 1rem; border-radius: .6rem;
+  background: var(--card); border: 1.5px solid var(--ink);
+}
+.sub-box h3 {
+  margin: 0 0 .4rem; font-size: .82rem; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--brick);
+}
+.metrics-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); gap: .6rem;
+}
+.metric-pill {
+  padding: .5rem .75rem; border-radius: .5rem; background: #fff;
+  border: 1.5px solid var(--ink); font-size: .82rem;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.metric-pill strong { color: var(--cerulean); font-variant-numeric: tabular-nums; }
+.glossary-item {
+  font-size: .88rem; padding: .4rem 0; border-bottom: 1px dashed rgba(28,37,48,.2);
+}
+.glossary-item:last-child { border-bottom: none; }
+audio { width: 100%; margin-top: .3rem; }
+
+/* ---------- Paste effect ---------- */
+#fx { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 3; }
+.field { position: relative; border-radius: .6rem; }
+.scan-clip { position: absolute; inset: 0; overflow: hidden; border-radius: .6rem; pointer-events: none; }
+.field .scan {
+  position: absolute; left: 0; right: 0; top: 0; height: 70px; border-radius: .6rem; pointer-events: none; opacity: 0;
+  background: linear-gradient(180deg, transparent, rgba(255, 207, 63, .55) 70%, rgba(255, 159, 28, .85) 96%, transparent);
+  mix-blend-mode: multiply;
+}
+.field.pasted .scan { animation: scan 1s cubic-bezier(.5, 0, .2, 1) forwards; }
+.field.pasted textarea { animation: flash 1s ease-out; }
+@keyframes scan { 0% { opacity: 1; top: -70px; } 85% { opacity: 1; } 100% { opacity: 0; top: 100%; } }
+@keyframes flash {
+  0% { box-shadow: 0 0 0 0 rgba(255, 159, 28, .9), 4px 4px 0 var(--sky); border-color: var(--saffron); }
+  100% { box-shadow: 0 0 0 28px rgba(255, 159, 28, 0), 4px 4px 0 var(--sky); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .glyph { transition: none; } #fx { display: none; }
+  .field.pasted .scan, .field.pasted textarea { animation: none; }
+}
+</style>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen p-6">
-  <div class="max-w-6xl mx-auto space-y-6">
-    <!-- Header -->
-    <header class="border-b border-slate-800 pb-4 flex justify-between items-center">
-      <div>
-        <h1 class="text-2xl font-bold text-indigo-400">BhashaSaral: Multilingual Simplification & Accessibility Engine</h1>
-        <p class="text-sm text-slate-400">LangGraph Self-Correcting NLP Pipeline • Script-Aware Indic Readability • Coqui Neural TTS</p>
-      </div>
-      <button onclick="loadAnalytics()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg text-sm font-semibold">
-        Generate Pandas/Seaborn Telemetry Report
-      </button>
-    </header>
+<body>
+<div class="glyphs" aria-hidden="true"></div>
+<canvas id="fx" aria-hidden="true"></canvas>
 
-    <!-- Input Panel -->
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <div class="lg:col-span-2 bg-slate-900 p-5 rounded-xl border border-slate-800 space-y-4">
-        <label class="block text-sm font-medium text-slate-300">Complex Educational / Scientific Content (English)</label>
-        <textarea id="inputText" rows="5" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm text-slate-100"
-          placeholder="Paste complex textbook paragraph here...">Photosynthesis is an endothermic biochemical process wherein photoautotrophic organisms convert electromagnetic radiation into chemical potential energy via chlorophyll pigments localized within cellular chloroplasts, synthesizing adenosine triphosphate (ATP) and reducing nicotinamide adenine dinucleotide phosphate (NADPH).</textarea>
-        
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">Target Regional Indian Language</label>
-            <select id="targetLang" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm">
-              <option value="hi">Hindi (हिन्दी - Devanagari)</option>
-              <option value="bn">Bengali (বাংলা - Bengali Script)</option>
-              <option value="ta">Tamil (தமிழ் - Tamil Script)</option>
-              <option value="te">Telugu (తెలుగు - Telugu Script)</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-xs text-slate-400 mb-1">Configurable Pedagogical Reading Level</label>
-            <select id="readingLevel" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-sm">
-              <option value="level_1">Level 1: Foundational / Low-Literacy (Grade 3-5)</option>
-              <option value="level_2">Level 2: Intermediate / Middle School (Grade 6-8)</option>
-              <option value="level_3">Level 3: Standard Academic / High School (Grade 9-12)</option>
-            </select>
-          </div>
-        </div>
+<div class="stage">
+<main>
+  <h1>Make information <mark>easier</mark> to understand</h1>
+  <p class="lede">LangGraph self-correcting multilingual simplification, script-aware readability validation &amp; neural audio narration.</p>
 
-        <button id="runBtn" onclick="runSimplification()" class="w-full bg-indigo-600 hover:bg-indigo-500 py-3 rounded-lg font-semibold text-sm transition">
-          Run LangGraph Simplification, Validation & Coqui Audio Narration
-        </button>
-      </div>
-
-      <!-- Quality Validation Telemetry Card -->
-      <div class="bg-slate-900 p-5 rounded-xl border border-slate-800 space-y-3">
-        <h2 class="text-sm font-semibold text-indigo-400 uppercase tracking-wider">Automated Quality Validation</h2>
-        <div id="metricsBox" class="text-sm space-y-2 text-slate-300">
-          <p class="text-slate-500 text-xs">Run the pipeline to inspect Back-Translation, Indic Unicode Readability, and Semantic Consistency scores.</p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Output Comparison Cards -->
-    <div id="outputSection" class="hidden grid grid-cols-1 md:grid-cols-2 gap-6">
-      <div class="bg-slate-900 p-5 rounded-xl border border-slate-800 space-y-3">
-        <h3 class="text-sm font-semibold text-emerald-400">1. Simplified Regional Output + Neural TTS Audio</h3>
-        <p id="indicOutput" class="text-lg leading-relaxed text-white bg-slate-950 p-4 rounded-lg border border-slate-800"></p>
-        <audio id="audioPlayer" controls class="w-full mt-2"></audio>
-        <div class="pt-2">
-          <h4 class="text-xs font-semibold text-slate-400 uppercase">Bilingual Technical Anchoring Glossary</h4>
-          <div id="glossaryList" class="mt-2 space-y-1 text-xs text-slate-300"></div>
-        </div>
-      </div>
-
-      <div class="bg-slate-900 p-5 rounded-xl border border-slate-800 space-y-3">
-        <h3 class="text-sm font-semibold text-amber-400">2. Intermediate Simplified English & Back-Translation</h3>
-        <div>
-          <span class="text-xs text-slate-400">Pedagogically Simplified English:</span>
-          <p id="simpEnglish" class="text-sm text-slate-200 bg-slate-950 p-3 rounded-lg mt-1"></p>
-        </div>
-        <div>
-          <span class="text-xs text-slate-400">Automated Back-Translation (Verification Check):</span>
-          <p id="backTrans" class="text-sm text-slate-300 bg-slate-950 p-3 rounded-lg mt-1 italic"></p>
-        </div>
-      </div>
-    </div>
-
-    <!-- Analytics Chart Modal/Section -->
-    <div id="analyticsSection" class="hidden bg-slate-900 p-5 rounded-xl border border-slate-800 space-y-4">
-      <h3 class="text-sm font-semibold text-emerald-400">SQL + Pandas + Seaborn Readability Drift & Fidelity Telemetry</h3>
-      <img id="analyticsImg" class="w-full rounded-lg border border-slate-700" src="" alt="Evaluation Chart" />
+  <div class="thread" aria-hidden="true">
+    <svg viewBox="0 0 700 84" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="thread-grad" x1="0" x2="1" y1="0" y2="0">
+          <stop offset="0" stop-color="#ffcf3f"/>
+          <stop offset=".45" stop-color="#ff9f1c"/>
+          <stop offset=".75" stop-color="#e4572e"/>
+          <stop offset="1" stop-color="#1f7fb8"/>
+        </linearGradient>
+      </defs>
+      <path id="thread-path" fill="none" stroke="url(#thread-grad)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle id="thread-start" r="6" fill="#ffcf3f" stroke="#1c2530" stroke-width="2"/>
+      <circle id="thread-end" r="6" fill="#1f7fb8" stroke="#1c2530" stroke-width="2"/>
+    </svg>
+    <div class="thread-label">
+      <span>Readability thread</span>
+      <span id="thread-state" data-level="calm">Waiting for text</span>
     </div>
   </div>
 
-  <script>
-    async function runSimplification() {
-      const btn = document.getElementById('runBtn');
-      btn.innerText = 'Executing LangGraph Agents & Validating Readability...';
-      btn.disabled = true;
+  <form id="simplify-form">
+    <div class="grid-2">
+      <div>
+        <label for="language">Target Language</label>
+        <select id="language" name="language" required>
+          <option value="hi">Hindi (हिन्दी)</option>
+          <option value="bn">Bengali (বাংলা)</option>
+          <option value="ta">Tamil (தமிழ்)</option>
+          <option value="te">Telugu (తెలుగు)</option>
+          <option value="en">English (Simplified)</option>
+          <option value="mr">Marathi (मराठी)</option>
+          <option value="gu">Gujarati (ગુજરાતી)</option>
+          <option value="kn">Kannada (ಕನ್ನಡ)</option>
+          <option value="ml">Malayalam (മലയാളം)</option>
+          <option value="pa">Punjabi (ਪੰਜਾਬੀ)</option>
+          <option value="ur">Urdu (اردو)</option>
+        </select>
+      </div>
+      <div>
+        <label for="reading-level">Reading Level</label>
+        <select id="reading-level" name="reading_level" required>
+          <option value="level_1">Level 1: Foundational / Low-Literacy (Grade 3–5)</option>
+          <option value="level_2">Level 2: Intermediate / Middle School (Grade 6–8)</option>
+          <option value="level_3">Level 3: Standard Academic / High School (Grade 9–12)</option>
+        </select>
+      </div>
+    </div>
 
-      try {
-        const res = await fetch('/api/simplify/text', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: document.getElementById('inputText').value,
-            target_language: document.getElementById('targetLang').value,
-            reading_level: document.getElementById('readingLevel').value,
-            generate_audio: true
-          })
-        });
-        const data = await res.json();
-        document.getElementById('outputSection').classList.remove('hidden');
-        document.getElementById('indicOutput').innerText = data.translated_indic_text;
-        document.getElementById('simpEnglish').innerText = data.simplified_english;
-        document.getElementById('backTrans').innerText = data.back_translated_text;
+    <label for="source-text">Text to simplify</label>
+    <div class="field">
+      <textarea id="source-text" name="text" required aria-describedby="help count" placeholder="Paste or type something complex…">Photosynthesis is an endothermic biochemical process wherein photoautotrophic organisms convert electromagnetic radiation into chemical potential energy via chlorophyll pigments localized within cellular chloroplasts, synthesizing adenosine triphosphate (ATP) and reducing nicotinamide adenine dinucleotide phosphate (NADPH).</textarea>
+      <div class="scan-clip" aria-hidden="true"><div class="scan"></div></div>
+    </div>
+    <div class="row">
+      <p id="help">Paste any complex educational or scientific paragraph to watch the thread untangle.</p>
+      <span id="count" aria-hidden="true">0 characters</span>
+    </div>
+    <div class="btn-row">
+      <button type="submit" id="submit">Simplify &amp; Narrate Text</button>
+      <button type="button" class="secondary" id="telemetry-btn">View Pandas/Seaborn Telemetry</button>
+    </div>
+  </form>
 
-        if (data.audio_narration_url) {
-          document.getElementById('audioPlayer').src = data.audio_narration_url;
-        }
+  <p id="status" role="status" aria-live="polite"></p>
 
-        const qv = data.quality_validation;
-        document.getElementById('metricsBox').innerHTML = `
-          <div class="flex justify-between border-b border-slate-800 py-1"><span>Source FK Grade:</span><span class="font-mono text-rose-400">${qv.source_flesch_kincaid_grade}</span></div>
-          <div class="flex justify-between border-b border-slate-800 py-1"><span>Simplified FK Grade:</span><span class="font-mono text-emerald-400">${qv.simplified_flesch_kincaid_grade}</span></div>
-          <div class="flex justify-between border-b border-slate-800 py-1"><span>Indic Readability Index (IRI):</span><span class="font-mono text-indigo-400">${qv.indic_readability_index}/100</span></div>
-          <div class="flex justify-between border-b border-slate-800 py-1"><span>Conjunct (Yuktakshar) Density:</span><span class="font-mono">${qv.indic_script_breakdown.conjunct_density}</span></div>
-          <div class="flex justify-between border-b border-slate-800 py-1"><span>Back-Translation Cosine Sim:</span><span class="font-mono text-amber-400">${qv.back_translation_cosine_sim}</span></div>
-          <div class="flex justify-between border-b border-slate-800 py-1"><span>AI Semantic Consistency:</span><span class="font-mono text-emerald-400">${qv.ai_semantic_consistency}</span></div>
-          <div class="flex justify-between border-b border-slate-800 py-1"><span>Composite Quality Score:</span><span class="font-mono font-bold text-white">${qv.composite_quality_score}</span></div>
-          <div class="flex justify-between py-1"><span>LangGraph Self-Correction Loops:</span><span class="font-mono">${qv.langgraph_iterations}</span></div>
-        `;
+  <section id="result" aria-labelledby="result-heading" hidden>
+    <div>
+      <h2 id="result-heading">Simplified &amp; Accessible Output</h2>
+      <p id="result-text"></p>
+      <audio id="audio-player" controls></audio>
+    </div>
 
-        const glossaryHtml = (data.technical_glossary || []).map(g =>
-          `<div class="bg-slate-950 p-2 rounded border border-slate-800">
-            <strong class="text-indigo-400">${g.english_term} (${g.indic_transliteration})</strong>: ${g.simple_native_meaning}
-          </div>`
-        ).join('');
-        document.getElementById('glossaryList').innerHTML = glossaryHtml;
-      } catch (e) {
-        alert('Error running pipeline: ' + e.message);
-      } finally {
-        btn.innerText = 'Run LangGraph Simplification, Validation & Coqui Audio Narration';
-        btn.disabled = false;
-      }
+    <div class="sub-box">
+      <h3>Automated Quality Validation Telemetry</h3>
+      <div class="metrics-grid" id="metrics-grid"></div>
+    </div>
+
+    <div class="sub-box">
+      <h3>Bilingual Technical Anchoring Glossary</h3>
+      <div id="glossary-box"></div>
+    </div>
+
+    <div class="sub-box">
+      <h3>Intermediate Simplified English &amp; Back-Translation Check</h3>
+      <p style="font-size:.88rem; margin:0 0 .4rem;"><strong>Simplified English:</strong> <span id="simp-en"></span></p>
+      <p style="font-size:.88rem; margin:0; font-style:italic;"><strong>Back-Translation Verification:</strong> <span id="back-trans"></span></p>
+    </div>
+  </section>
+
+  <section id="telemetry-section" class="sub-box" style="margin-top:1.2rem;" hidden>
+    <h3>SQL + Pandas + Seaborn Readability &amp; Fidelity Report</h3>
+    <img id="telemetry-img" src="" alt="Telemetry Report Chart" style="width:100%; border-radius:.5rem; border:1.5px solid var(--ink);" />
+  </section>
+</main>
+</div>
+
+<script>
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const form = document.querySelector("#simplify-form");
+const status = document.querySelector("#status");
+const submit = document.querySelector("#submit");
+const textarea = document.querySelector("#source-text");
+const counter = document.querySelector("#count");
+const resultBox = document.querySelector("#result");
+const stateLabel = document.querySelector("#thread-state");
+
+counter.textContent = textarea.value.length.toLocaleString() + " characters";
+
+/* ---------- Readability thread ---------- */
+function complexity(text) {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length < 3) return null;
+  const sentences = text.split(/[.!?।॥؟]+/).filter((s) => s.trim()).length || 1;
+  const avgWord = words.reduce((n, w) => n + [...w].length, 0) / words.length;
+  const avgSent = words.length / sentences;
+  const score = ((avgWord - 3.8) / 3.2) * 0.55 + ((avgSent - 8) / 22) * 0.45;
+  return Math.max(0, Math.min(1, score));
+}
+
+let threadTarget = 0.12;
+let resultShown = false;
+
+function refreshThread() {
+  let level = "calm", label = "Waiting for text";
+  if (resultShown) {
+    threadTarget = 0; level = "smooth"; label = "Untangled & Verified";
+  } else {
+    const c = complexity(textarea.value);
+    if (c === null) {
+      threadTarget = 0.12;
+    } else {
+      threadTarget = 0.1 + c * 0.9;
+      if (c > 0.6) { level = "tangled"; label = "Tangled: hard to read"; }
+      else if (c > 0.3) { level = "calm"; label = "Some knots"; }
+      else { level = "smooth"; label = "Easy to read"; }
+    }
+  }
+  stateLabel.textContent = label;
+  stateLabel.dataset.level = level;
+}
+
+const path = document.querySelector("#thread-path");
+const dotA = document.querySelector("#thread-start");
+const dotB = document.querySelector("#thread-end");
+const N = 16, W = 700, MID = 42;
+let seed = 7;
+const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
+const knots = Array.from({ length: N }, () => ({ ox: rnd() * 58, oy: rnd() * 36, ph: rnd() * 6 }));
+
+let amount = threadTarget, amountV = 0, busyJitter = 0;
+function drawThread(t) {
+  const pts = knots.map((k, i) => {
+    const x0 = (i / (N - 1)) * W;
+    const wob = Math.sin(t * 1.4 + k.ph) * (1.5 + 7 * amount);
+    const end = i === 0 || i === N - 1 ? 0 : 1;
+    return [
+      x0 + k.ox * amount * end,
+      MID + (k.oy * amount + wob + Math.sin(t * 9 + i) * busyJitter) * end
+    ];
+  });
+  let d = `M ${pts[0][0]} ${pts[0][1]}`;
+  for (let i = 0; i < N - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    d += ` C ${p1[0] + (p2[0] - p0[0]) / 6} ${p1[1] + (p2[1] - p0[1]) / 6}, ${p2[0] - (p3[0] - p1[0]) / 6} ${p2[1] - (p3[1] - p1[1]) / 6}, ${p2[0]} ${p2[1]}`;
+  }
+  path.setAttribute("d", d);
+  dotA.setAttribute("cx", pts[0][0]); dotA.setAttribute("cy", pts[0][1]);
+  dotB.setAttribute("cx", pts[N - 1][0]); dotB.setAttribute("cy", pts[N - 1][1]);
+}
+
+/* ---------- Keystroke-reactive glyph colors ---------- */
+const palette = ["#ff9f1c", "#e4572e", "#1f7fb8", "#ffcf3f", "#5ec2e8", "#b83a1a", "#ff7a3d", "#2a9fd6"];
+const letters = ["अ", "অ", "த", "తె", "ક", "ಕ", "മ", "ਪ", "ا", "A", "म", "ক", "ட", "ళ", "ज", "ব"];
+const glyphLayer = document.querySelector(".glyphs");
+const glyphs = letters.map((ch, i) => {
+  const el = document.createElement("span");
+  el.className = "glyph"; el.textContent = ch;
+  const size = 44 + Math.random() * 84;
+  el.style.fontSize = size + "px";
+  el.style.color = palette[i % palette.length];
+  glyphLayer.append(el);
+  return {
+    el, r: size * .55,
+    x: Math.random() * innerWidth, y: Math.random() * innerHeight,
+    vx: (Math.random() - .5) * 36, vy: (Math.random() - .5) * 36,
+    rot: Math.random() * 360, vr: 0, vr0: 0, boost: 0
+  };
+});
+
+glyphs.forEach((g) => { g.vr0 = g.vr = (Math.random() - .5) * 16; });
+let colorIndex = 0;
+function recolor(code) {
+  colorIndex = (colorIndex + (code % 5) + 1) % palette.length;
+  glyphs.forEach((g, i) => {
+    g.el.style.transitionDelay = reduce ? "0ms" : i * 28 + "ms";
+    g.el.style.color = palette[(colorIndex + i * 3) % palette.length];
+    if (!reduce) {
+      const a = Math.random() * Math.PI * 2;
+      g.vx += Math.cos(a) * 26; g.vy += Math.sin(a) * 26;
+    }
+  });
+}
+
+textarea.addEventListener("input", (e) => {
+  if (reduce || e.inputType !== "insertFromPaste") counter.textContent = textarea.value.length.toLocaleString() + " characters";
+  resultShown = false;
+  refreshThread();
+  recolor(e.data ? e.data.codePointAt(0) : 8);
+});
+
+function setStatus(msg, cls) { status.textContent = msg; status.className = cls || ""; }
+
+form.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  setStatus("Executing LangGraph Simplification, Validation & Neural Narration…");
+  submit.setAttribute("aria-busy", "true");
+  resultBox.hidden = true;
+  resultShown = false;
+  busyJitter = 5;
+  try {
+    const selectedLang = document.querySelector("#language").value;
+    const selectedLevel = document.querySelector("#reading-level").value;
+    const response = await fetch("/api/simplify/text", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text: textarea.value,
+        target_language: selectedLang,
+        reading_level: selectedLevel,
+        generate_audio: true
+      })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload.detail || "Request failed.");
+
+    const displayOutput = selectedLang === "en" ? payload.simplified_english : payload.translated_indic_text;
+    document.querySelector("#result-text").textContent = displayOutput;
+    document.querySelector("#simp-en").textContent = payload.simplified_english;
+    document.querySelector("#back-trans").textContent = payload.back_translated_text;
+
+    const audioPlayer = document.querySelector("#audio-player");
+    if (payload.audio_narration_url) {
+      audioPlayer.src = payload.audio_narration_url;
+      audioPlayer.hidden = false;
+      audioPlayer.load();
+    } else {
+      audioPlayer.hidden = true;
     }
 
-    async function loadAnalytics() {
-      const res = await fetch('/api/analytics/report');
-      const data = await res.json();
-      if (data.chart_url) {
-        document.getElementById('analyticsSection').classList.remove('hidden');
-        document.getElementById('analyticsImg').src = data.chart_url + '?t=' + Date.now();
-      }
+    const qv = payload.quality_validation;
+    document.querySelector("#metrics-grid").innerHTML = `
+      <div class="metric-pill"><span>Source FK Grade</span><strong>${qv.source_flesch_kincaid_grade}</strong></div>
+      <div class="metric-pill"><span>Simplified FK Grade</span><strong>${qv.simplified_flesch_kincaid_grade}</strong></div>
+      <div class="metric-pill"><span>Indic Readability</span><strong>${qv.indic_readability_index}/100</strong></div>
+      <div class="metric-pill"><span>Conjunct Density</span><strong>${qv.indic_script_breakdown.conjunct_density}</strong></div>
+      <div class="metric-pill"><span>Back-Trans Sim</span><strong>${qv.back_translation_cosine_sim}</strong></div>
+      <div class="metric-pill"><span>AI Semantic Check</span><strong>${qv.ai_semantic_consistency}</strong></div>
+      <div class="metric-pill"><span>Composite Score</span><strong>${qv.composite_quality_score}</strong></div>
+      <div class="metric-pill"><span>LangGraph Loops</span><strong>${qv.langgraph_iterations}</strong></div>
+    `;
+
+    const glossaryHtml = (payload.technical_glossary || []).map(g =>
+      `<div class="glossary-item"><strong>${g.english_term} (${g.indic_transliteration})</strong>: ${g.simple_native_meaning}</div>`
+    ).join("");
+    document.querySelector("#glossary-box").innerHTML = glossaryHtml || "<div class='glossary-item'>No complex jargon detected.</div>";
+
+    resultBox.hidden = false;
+    resultShown = true;
+    setStatus("Text simplified, validated, and narrated.", "ok");
+  } catch (error) {
+    setStatus(error.message, "error");
+  } finally {
+    busyJitter = 0;
+    submit.removeAttribute("aria-busy");
+    refreshThread();
+  }
+});
+
+document.querySelector("#telemetry-btn").addEventListener("click", async () => {
+  setStatus("Generating SQL + Pandas + Seaborn evaluation report…");
+  try {
+    const res = await fetch("/api/analytics/report");
+    const data = await res.json();
+    if (data.chart_url) {
+      const sec = document.querySelector("#telemetry-section");
+      document.querySelector("#telemetry-img").src = data.chart_url + "?t=" + Date.now();
+      sec.hidden = false;
+      setStatus("Telemetry chart updated.", "ok");
+    } else {
+      setStatus("Run at least one simplification first to populate SQL telemetry.", "error");
     }
-  </script>
+  } catch (e) {
+    setStatus("Could not load telemetry chart.", "error");
+  }
+});
+
+refreshThread();
+
+/* ---------- Paste burst ---------- */
+const field = document.querySelector(".field");
+const fx = document.querySelector("#fx");
+const ctx = fx.getContext("2d");
+const parts = [], rings = [];
+function sizeFx() {
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  fx.width = innerWidth * dpr; fx.height = innerHeight * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+sizeFx(); addEventListener("resize", sizeFx);
+
+function animateCount(to) {
+  const from = parseInt(counter.textContent.replace(/\D/g, ""), 10) || 0, t0 = performance.now();
+  (function tick(now) {
+    const k = Math.min(1, (now - t0) / 700), e = 1 - Math.pow(1 - k, 3);
+    counter.textContent = Math.round(from + (to - from) * e).toLocaleString() + " characters";
+    if (k < 1) requestAnimationFrame(tick);
+  })(t0);
+}
+
+function pasteBurst(pasted) {
+  const box = textarea.getBoundingClientRect();
+  const cx = box.left + box.width / 2, cy = box.top + box.height / 2;
+
+  const chars = [...pasted.replace(/\s+/g, "")];
+  for (let i = 0; i < Math.min(54, chars.length); i++) {
+    const a = -Math.PI / 2 + (Math.random() - .5) * 2.6, sp = 280 + Math.random() * 560;
+    parts.push({
+      ch: chars[Math.floor(Math.random() * chars.length)],
+      x: box.left + Math.random() * box.width, y: box.top + box.height * (.15 + Math.random() * .6),
+      vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, rot: Math.random() * 6, vr: (Math.random() - .5) * 10,
+      size: 16 + Math.random() * 22, life: 0, max: 1.3 + Math.random() * .9,
+      color: palette[Math.floor(Math.random() * palette.length)]
+    });
+  }
+  [["#ff9f1c", 0], ["#e4572e", .12], ["#1f7fb8", .24]].forEach(([color, delay]) => rings.push({ x: cx, y: cy, t: 0, delay, color }));
+
+  glyphs.forEach((g) => {
+    const dx = cx - g.x, dy = cy - g.y, d = Math.hypot(dx, dy) || 1;
+    g.vx = (dx / d) * 1000; g.vy = (dy / d) * 1000; g.boost = .5;
+  });
+  setTimeout(() => {
+    colorIndex = (colorIndex + 3) % palette.length;
+    glyphs.forEach((g, i) => {
+      const dx = g.x - cx, dy = g.y - cy, d = Math.hypot(dx, dy) || 1, sp = 750 + Math.random() * 450;
+      g.vx = (dx / d) * sp; g.vy = (dy / d) * sp; g.vr = (Math.random() - .5) * 520; g.boost = 1;
+      g.el.style.transitionDelay = i * 20 + "ms";
+      g.el.style.color = palette[(colorIndex + i * 3) % palette.length];
+    });
+  }, 430);
+
+  amountV += 45; busyJitter = 10; setTimeout(() => { busyJitter = 0; }, 800);
+
+  field.classList.remove("pasted"); void field.offsetWidth; field.classList.add("pasted");
+  setTimeout(() => animateCount(textarea.value.length), 0);
+}
+
+textarea.addEventListener("paste", (e) => {
+  if (reduce) return;
+  const text = (e.clipboardData && e.clipboardData.getData("text")) || "";
+  pasteBurst(text);
+});
+
+function drawFx(dt) {
+  ctx.clearRect(0, 0, innerWidth, innerHeight);
+  for (let i = rings.length - 1; i >= 0; i--) {
+    const r = rings[i]; r.t += dt; const l = r.t - r.delay;
+    if (l < 0) continue;
+    if (l > 1.1) { rings.splice(i, 1); continue; }
+    const k = l / 1.1;
+    ctx.globalAlpha = 1 - k; ctx.strokeStyle = r.color; ctx.lineWidth = 9 * (1 - k) + 1;
+    ctx.beginPath(); ctx.arc(r.x, r.y, l * 1100, 0, 6.2832); ctx.stroke();
+  }
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const q = parts[i]; q.life += dt;
+    if (q.life >= q.max) { parts.splice(i, 1); continue; }
+    q.vy += 950 * dt; q.vx *= .994; q.x += q.vx * dt; q.y += q.vy * dt; q.rot += q.vr * dt;
+    const k = q.life / q.max;
+    ctx.globalAlpha = 1 - k * k; ctx.fillStyle = q.color;
+    ctx.save(); ctx.translate(q.x, q.y); ctx.rotate(q.rot);
+    ctx.font = `800 ${q.size}px "Segoe UI", "Noto Sans", sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(q.ch, 0, 0); ctx.restore();
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* ---------- Animation loop ---------- */
+if (reduce) {
+  amount = threadTarget; drawThread(0);
+  textarea.addEventListener("input", () => { amount = threadTarget; drawThread(0); });
+  form.addEventListener("submit", () => setTimeout(() => { amount = threadTarget; drawThread(0); }, 400));
+  glyphs.forEach((g) => { g.el.style.transform = `translate(${g.x - g.r}px, ${g.y - g.r}px) rotate(${g.rot}deg)`; });
+} else {
+  const pointer = { x: -999, y: -999 };
+  addEventListener("pointermove", (e) => { pointer.x = e.clientX; pointer.y = e.clientY; });
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min((now - last) / 1000, .033); last = now;
+
+    amountV += (-70 * (amount - threadTarget) - 9 * amountV) * dt;
+    amount += amountV * dt;
+    drawThread(now / 1000);
+    drawFx(dt);
+
+    for (const g of glyphs) {
+      const dx = g.x - pointer.x, dy = g.y - pointer.y, d = Math.hypot(dx, dy) || 1;
+      if (d < 170) { const f = (170 - d) / 170 * 800; g.vx += (dx / d) * f * dt; g.vy += (dy / d) * f * dt; }
+      g.vx *= .992; g.vy *= .992;
+      const sp = Math.hypot(g.vx, g.vy);
+      if (g.boost > 0) g.boost -= dt;
+      const cap = g.boost > 0 ? 1300 : 170;
+      if (sp > cap) {
+        const k = g.boost > 0 ? cap / sp : 1 - Math.min(1, 3.5 * dt) * (1 - cap / sp);
+        g.vx *= k; g.vy *= k;
+      }
+      g.vr += (g.vr0 - g.vr) * Math.min(1, 2 * dt);
+      if (sp < 14) { g.vx += (Math.random() - .5) * 30 * dt; g.vy += (Math.random() - .5) * 30 * dt; }
+      g.x += g.vx * dt; g.y += g.vy * dt; g.rot += g.vr * dt;
+      if (g.x < g.r) { g.x = g.r; g.vx = Math.abs(g.vx); }
+      if (g.x > innerWidth - g.r) { g.x = innerWidth - g.r; g.vx = -Math.abs(g.vx); }
+      if (g.y < g.r) { g.y = g.r; g.vx = Math.abs(g.vx); }
+      if (g.y > innerHeight - g.r) { g.y = innerHeight - g.r; g.vx = -Math.abs(g.vx); }
+      g.el.style.transform = `translate(${g.x - g.r}px, ${g.y - g.r}px) rotate(${g.rot}deg)`;
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+</script>
 </body>
 </html>
