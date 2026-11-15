@@ -1,15 +1,15 @@
 import os
-import sys
 import uuid
-import subprocess
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from app.config import Config
 
 
 class NeuralAccessibilityAudioEngine:
     """
     Multilingual Neural Text-to-Speech Engine for Low-Literacy Accessibility.
-    Uses direct in-memory UTF-8 synthesis (compatible with Windows Devanagari/Bengali)
-    and adjusts speech prosody based on reading level.
+    Runs async edge-tts inside a dedicated worker thread so it never conflicts
+    with FastAPI/Uvicorn's running event loop on cloud containers.
     """
 
     INDIC_NEURAL_VOICES = {
@@ -22,53 +22,56 @@ class NeuralAccessibilityAudioEngine:
         "gu": "gu-IN-DhwaniNeural",
         "kn": "kn-IN-SapnaNeural",
         "ml": "ml-IN-SobhanaNeural",
-        "pa": "pa-IN-OjasNeural",
         "ur": "ur-IN-GulNeural"
     }
 
     def __init__(self):
-        self._coqui_tts = None
-        self._coqui_available = False
-        self._ensure_tts_packages()
+        self._executor = ThreadPoolExecutor(max_workers=2)
 
-    def _ensure_tts_packages(self):
-        """Ensures gTTS and edge-tts are installed in the exact Python environment running Uvicorn."""
+    @staticmethod
+    def _run_edge_tts_in_thread(text: str, voice: str, rate: str, output_path: str):
+        import edge_tts
+
+        async def _coro():
+            communicate = edge_tts.Communicate(text=text, voice=voice, rate=rate)
+            await communicate.save(output_path)
+
+        loop = asyncio.new_event_loop()
         try:
-            import gtts
-            import edge_tts
-        except ImportError:
-            print("[INFO] Installing lightweight neural TTS packages into active environment...")
-            subprocess.run([sys.executable, "-m", "pip", "install", "gTTS", "edge-tts"], check=False)
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(_coro())
+        finally:
+            loop.close()
 
     def synthesize_narration(self, text: str, lang_code: str, reading_level: str) -> str:
-        """
-        Synthesizes natural spoken narration in Hindi, Bengali, Tamil, or Telugu
-        directly in UTF-8 memory without Windows CLI encoding issues.
-        """
+        if not text or not text.strip():
+            return ""
+
         filename = f"narration_{lang_code}_{uuid.uuid4().hex[:8]}.mp3"
         output_path = os.path.join(Config.AUDIO_OUTPUT_DIR, filename)
 
-        # 1. Primary: Direct in-memory Neural Edge-TTS (Supports Hindi, Bengali, Tamil, Telugu)
-        try:
-            import edge_tts
-            voice = self.INDIC_NEURAL_VOICES.get(lang_code, "hi-IN-SwaraNeural")
-            rate = "-15%" if reading_level == "level_1" else ("-5%" if reading_level == "level_2" else "+0%")
-            communicate = edge_tts.Communicate(text=text, voice=voice, rate=rate)
-            communicate.save_sync(output_path)
-            if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
-                return f"/static/audio/{filename}"
-        except Exception as e:
-            print(f"[INFO] Switching from edge_tts to gTTS ({e})")
+        # 1. Primary: Microsoft Edge Neural Indian Voices in an isolated event-loop thread
+        if lang_code in self.INDIC_NEURAL_VOICES:
+            try:
+                voice = self.INDIC_NEURAL_VOICES[lang_code]
+                rate = "-15%" if reading_level == "level_1" else ("-5%" if reading_level == "level_2" else "+0%")
+                future = self._executor.submit(
+                    self._run_edge_tts_in_thread, text, voice, rate, output_path
+                )
+                future.result(timeout=20)
+                if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
+                    return f"/static/audio/{filename}"
+            except Exception as e:
+                print(f"[INFO] edge_tts thread fallback to gTTS for {lang_code}: {e}")
 
-        # 2. Direct in-memory Google Multilingual TTS (UTF-8 safe on Windows)
+        # 2. Secondary: Google Multilingual TTS (Supports Punjabi 'pa' and all Indic scripts)
         try:
             from gtts import gTTS
-            # Use slow=False for natural articulation
-            tts = gTTS(text=text, lang=lang_code, slow=False)
+            tts = gTTS(text=text, lang=lang_code, slow=(reading_level == "level_1"))
             tts.save(output_path)
             if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
                 return f"/static/audio/{filename}"
         except Exception as e:
-            print(f"[ERROR] TTS generation failed: {e}")
+            print(f"[ERROR] TTS synthesis failed for {lang_code}: {e}")
 
         return ""
